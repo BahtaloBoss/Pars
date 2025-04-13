@@ -18,6 +18,62 @@ import tkinter.messagebox as msgbox
 
 # ===== НАСТРОЙКА КОДИРОВОК ДЛЯ ПРЕДОТВРАЩЕНИЯ UNICODE ОШИБОК =====
 
+# Создаем утилиты для общих операций
+class FileUtils:
+    """Утилиты для файловых операций с правильной обработкой кодировок."""
+    
+    @staticmethod
+    def safe_open(file_path, mode='r', encoding='utf-8', errors='backslashreplace'):
+        """Безопасное открытие файла с обработкой ошибок кодировки."""
+        try:
+            return open(file_path, mode, encoding=encoding, errors=errors)
+        except UnicodeDecodeError as e:
+            logging.warning(f"Ошибка декодирования при открытии {file_path}: {e}")
+            # Попытка определить кодировку файла
+            try:
+                import chardet
+                with open(file_path, 'rb') as binary_file:
+                    result = chardet.detect(binary_file.read())
+                    detected_encoding = result['encoding'] or 'utf-8'
+                logging.info(f"Обнаружена кодировка {detected_encoding} для файла {file_path}")
+                return open(file_path, mode, encoding=detected_encoding, errors='backslashreplace')
+            except ImportError:
+                logging.warning("Модуль chardet не установлен. Используем системную кодировку.")
+                system_encoding = locale.getpreferredencoding()
+                return open(file_path, mode, encoding=system_encoding, errors='backslashreplace')
+            except Exception as e:
+                logging.error(f"Не удалось определить кодировку: {e}")
+                # Крайний случай - попытка использовать системную кодировку
+                system_encoding = locale.getpreferredencoding()
+                return open(file_path, mode, encoding=system_encoding, errors='backslashreplace')
+    
+    @staticmethod
+    def ensure_directory(dir_path):
+        """Создать директорию, если она не существует."""
+        if not os.path.exists(dir_path):
+            os.makedirs(dir_path)
+            logging.info(f"Создана директория: {dir_path}")
+    
+    @staticmethod
+    def create_file_with_content(file_path, content, encoding='utf-8'):
+        """Создать файл с указанным содержимым."""
+        try:
+            with open(file_path, 'w', encoding=encoding) as f:
+                f.write(content)
+            logging.info(f"Создан файл: {file_path}")
+            return True
+        except Exception as e:
+            logging.error(f"Ошибка при создании файла {file_path}: {e}")
+            # Попытка создать файл с другой кодировкой
+            try:
+                with open(file_path, 'w', encoding=locale.getpreferredencoding()) as f:
+                    f.write(content)
+                logging.warning(f"Файл {file_path} создан с системной кодировкой")
+                return True
+            except Exception as e2:
+                logging.error(f"Критическая ошибка при создании файла {file_path}: {e2}")
+                return False
+
 # Определение используемой системы и настройка кодировок
 def setup_encoding():
     """Настройка кодировки для консоли и потоков ввода-вывода."""
@@ -58,37 +114,11 @@ def setup_encoding():
         except Exception as e:
             logging.warning(f"Ошибка при настройке кодировки для Unix: {e}")
 
-# Настройка безопасной работы с файлами
-def safe_open(file_path, mode='r', encoding='utf-8', errors='backslashreplace'):
-    """Безопасное открытие файла с обработкой ошибок кодировки."""
-    try:
-        return open(file_path, mode, encoding=encoding, errors=errors)
-    except UnicodeDecodeError as e:
-        logging.warning(f"Ошибка декодирования при открытии {file_path}: {e}")
-        # Попытка определить кодировку файла
-        try:
-            import chardet
-            with open(file_path, 'rb') as binary_file:
-                result = chardet.detect(binary_file.read())
-                detected_encoding = result['encoding'] or 'utf-8'
-            logging.info(f"Обнаружена кодировка {detected_encoding} для файла {file_path}")
-            return open(file_path, mode, encoding=detected_encoding, errors='backslashreplace')
-        except ImportError:
-            logging.warning("Модуль chardet не установлен. Используем системную кодировку.")
-            system_encoding = locale.getpreferredencoding()
-            return open(file_path, mode, encoding=system_encoding, errors='backslashreplace')
-        except Exception as e:
-            logging.error(f"Не удалось определить кодировку: {e}")
-            # Крайний случай - попытка использовать системную кодировку
-            system_encoding = locale.getpreferredencoding()
-            return open(file_path, mode, encoding=system_encoding, errors='backslashreplace')
-
 # Настройка базового логгирования с правильной кодировкой
 def setup_logging():
     """Настройка логирования с корректной обработкой Unicode."""
     # Создаем директорию для логов если отсутствует
-    if not os.path.exists('logs'):
-        os.makedirs('logs')
+    FileUtils.ensure_directory('logs')
     
     # Формируем имя файла лога с текущей датой и временем
     log_filename = f"logs/scraper_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
@@ -127,26 +157,12 @@ def create_required_files():
     }
     
     # Создание директорий для вывода данных (если нет)
-    for dir_name in ['logs']:
-        if not os.path.exists(dir_name):
-            os.makedirs(dir_name)
+    FileUtils.ensure_directory('logs')
     
     # Создание необходимых файлов с дефолтным содержимым
     for filename, default_content in required_files.items():
         if not os.path.exists(filename):
-            try:
-                with open(filename, 'w', encoding='utf-8') as f:
-                    f.write(default_content)
-                logging.info(f"Создан файл по умолчанию: {filename}")
-            except Exception as e:
-                logging.error(f"Ошибка при создании файла {filename}: {e}")
-                # Попытка создать файл с другой кодировкой
-                try:
-                    with open(filename, 'w', encoding=locale.getpreferredencoding()) as f:
-                        f.write(default_content)
-                    logging.warning(f"Файл {filename} создан с системной кодировкой")
-                except Exception as e2:
-                    logging.error(f"Критическая ошибка при создании файла {filename}: {e2}")
+            FileUtils.create_file_with_content(filename, default_content)
 
 def check_files_encoding():
     """Проверяет кодировку существующих файлов и исправляет при необходимости."""
@@ -203,8 +219,10 @@ def main():
     
     # Проверяем, что у нас есть файл debug.txt
     if not os.path.exists("debug.txt"):
-        with open("debug.txt", "w", encoding="utf-8") as f:
-            f.write(f"=== ЖУРНАЛ ОТЛАДКИ СОЗДАН {datetime.now()} ===\n\n")
+        FileUtils.create_file_with_content(
+            "debug.txt", 
+            f"=== ЖУРНАЛ ОТЛАДКИ СОЗДАН {datetime.now()} ===\n\n"
+        )
     
     # Создаем необходимые файлы конфигурации
     create_required_files()
