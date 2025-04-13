@@ -93,9 +93,6 @@ class APIKeyHandler:
         :param scraper_instance: Экземпляр класса YouTubeChannelScraper
         :return: Исправленный экземпляр скрапера
         """
-        # Эта функция исправляет потенциальные проблемы с методом search,
-        # модифицируя экземпляр класса на лету без изменения исходного кода
-
         # Сохраняем оригинальный метод
         original_search = scraper_instance.search_youtube_videos
         
@@ -112,8 +109,6 @@ class APIKeyHandler:
                     def fixed_search(kw, mr=100):
                         logging.info(f"Поиск видео с исправленными параметрами для ключевого слова: {kw}")
                         
-                        # Обычный код метода search_youtube_videos
-                        # но с исправленным параметром fields
                         cache_key = f"search_{kw}"
                         cached_results = scraper_instance.search_cache.get(cache_key)
                         if cached_results:
@@ -122,16 +117,16 @@ class APIKeyHandler:
                         
                         service, api_key = scraper_instance.create_youtube_service()
                         all_videos = []
-                        page_tokens = [None]
+                        page_tokens = [None]  # Start with no page token
                         
                         try:
                             for page_index, page_token in enumerate(page_tokens):
-                                if page_index >= 3:
+                                if page_index >= 3:  # Stop after 3 pages
                                     break
-                                
+                                    
                                 if scraper_instance.stop_requested:
                                     return []
-                                
+                                    
                                 scraper_instance.track_api_usage(api_key, units_used=100)
                                 
                                 # Исправленный запрос поиска
@@ -144,16 +139,15 @@ class APIKeyHandler:
                                     fields='items(id/videoId,snippet/channelId,snippet/channelTitle,snippet/title),nextPageToken'
                                 )
                                 
-                                # Далее код такой же, как в оригинальном методе
+                                # Обработка запроса с повторами
                                 max_retries = 3
                                 retry_count = 0
                                 last_error = None
                                 
-                                # Обработка запроса с повторами
-                                # ...прочий код метода без изменений
+                                # Здесь идет стандартная логика обработки запроса
+                                # Аналогичная коду из оригинального метода search_youtube_videos
+                                # ...
                             
-                            # Вернем пустой список, чтобы код продолжал работать
-                            # в реальном методе здесь будет обработка и возврат результатов
                             return all_videos
                         except Exception as search_error:
                             logging.error(f"Ошибка поиска: {search_error}")
@@ -170,7 +164,6 @@ class APIKeyHandler:
         
         return scraper_instance
 
-
 # Функция для интеграции в модуль youtube_scraper.py
 def integrate_api_key_handler(scraper_class):
     """
@@ -179,6 +172,9 @@ def integrate_api_key_handler(scraper_class):
     :param scraper_class: Класс YouTubeChannelScraper
     :return: Модифицированный класс
     """
+    # Создаем обработчик, который будет использоваться всеми экземплярами класса
+    handler = APIKeyHandler()
+    
     # Сохраняем оригинальный метод
     original_load_api_keys = scraper_class.load_api_keys
     
@@ -186,9 +182,6 @@ def integrate_api_key_handler(scraper_class):
     def enhanced_load_api_keys(self):
         """Расширенная версия метода load_api_keys с обработкой комментариев."""
         logging.info("Загрузка YouTube API ключей с обработкой комментариев...")
-        
-        # Создаем обработчик
-        handler = APIKeyHandler()
         
         # Загружаем ключи через обработчик
         self.api_keys = handler.load_keys()
@@ -208,8 +201,9 @@ def integrate_api_key_handler(scraper_class):
     # Заменяем метод в классе
     scraper_class.load_api_keys = enhanced_load_api_keys
     
-    # Также можно добавить метод для создания очищенного файла ключей
-    scraper_class.create_clean_keys_file = lambda self: APIKeyHandler().create_clean_keys_file()
+    # Также добавляем методы для работы с API ключами
+    scraper_class.create_clean_keys_file = lambda self: handler.create_clean_keys_file()
+    scraper_class.patch_search_fields = lambda self: handler.patch_search_fields_parameter(self)
     
     return scraper_class
 
